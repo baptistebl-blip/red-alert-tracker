@@ -1,0 +1,1025 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Red Alert Tracker — Israel</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg: #0f1117;
+            --surface: #1a1d27;
+            --surface-hover: #222632;
+            --border: #2a2e3a;
+            --text: #e4e6eb;
+            --text-dim: #8b8fa3;
+            --red: #e74c3c;
+            --red-dim: rgba(231, 76, 60, 0.15);
+            --orange: #f39c12;
+            --blue: #3498db;
+            --green: #2ecc71;
+            --purple: #9b59b6;
+            --radius: 12px;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.5;
+            min-height: 100vh;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #1a1d27 0%, #2a1520 100%);
+            border-bottom: 1px solid var(--border);
+            padding: 20px 32px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .header h1 {
+            font-size: 1.4rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .header h1 .dot {
+            width: 10px;
+            height: 10px;
+            background: var(--red);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.7); }
+            50% { opacity: 0.8; box-shadow: 0 0 0 8px rgba(231, 76, 60, 0); }
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .status-badge {
+            font-size: 0.8rem;
+            padding: 4px 12px;
+            border-radius: 20px;
+            background: var(--surface);
+            color: var(--text-dim);
+            border: 1px solid var(--border);
+            white-space: nowrap;
+        }
+
+        .status-badge.fetching {
+            background: var(--red-dim);
+            color: var(--red);
+            border-color: var(--red);
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text);
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: background 0.2s;
+            white-space: nowrap;
+        }
+
+        .btn:hover { background: var(--surface-hover); }
+
+        /* --- Search bar --- */
+        .search-bar {
+            padding: 12px 32px;
+            background: var(--bg);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .search-wrapper {
+            position: relative;
+            flex: 1;
+            max-width: 440px;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 10px 16px;
+            padding-right: 36px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            background: var(--surface);
+            color: var(--text);
+            font-size: 0.9rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .search-input::placeholder { color: var(--text-dim); }
+        .search-input:focus { border-color: var(--blue); }
+
+        .search-clear {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            color: var(--text-dim);
+            cursor: pointer;
+            font-size: 1.1rem;
+            line-height: 1;
+            display: none;
+            padding: 2px 6px;
+        }
+
+        .search-clear:hover { color: var(--text); }
+
+        .dropdown {
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0;
+            right: 0;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            max-height: 260px;
+            overflow-y: auto;
+            z-index: 50;
+            display: none;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+        }
+
+        .dropdown.open { display: block; }
+
+        .dropdown-item {
+            padding: 10px 16px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .dropdown-item:last-child { border-bottom: none; }
+        .dropdown-item:hover, .dropdown-item.active { background: var(--surface-hover); }
+
+        .dropdown-item .en { color: var(--text); }
+        .dropdown-item .he { color: var(--text-dim); font-size: 0.8rem; direction: rtl; }
+
+        .filter-badge {
+            display: none;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            border-radius: 20px;
+            background: var(--blue);
+            color: #fff;
+            font-size: 0.85rem;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+
+        .filter-badge.visible { display: inline-flex; }
+
+        .filter-badge button {
+            background: none;
+            border: none;
+            color: rgba(255,255,255,0.7);
+            cursor: pointer;
+            font-size: 1rem;
+            line-height: 1;
+            padding: 0;
+        }
+
+        .filter-badge button:hover { color: #fff; }
+
+        /* --- Main content --- */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        .cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+        }
+
+        .card-label {
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .card-value {
+            font-size: 1.8rem;
+            font-weight: 700;
+        }
+
+        .card-sub {
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            margin-top: 4px;
+        }
+
+        .card-value.red { color: var(--red); }
+        .card-value.orange { color: var(--orange); }
+        .card-value.blue { color: var(--blue); }
+        .card-value.green { color: var(--green); }
+        .card-value.purple { color: var(--purple); }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .chart-box {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+        }
+
+        .chart-box h3 {
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: var(--text-dim);
+        }
+
+        .chart-container {
+            position: relative;
+            width: 100%;
+            height: 300px;
+        }
+
+        .chart-box.wide { grid-column: 1 / -1; }
+
+        .table-box {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+
+        .table-box h3 {
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: var(--text-dim);
+        }
+
+        .alerts-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .alerts-table th {
+            text-align: left;
+            padding: 10px 12px;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-dim);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .alerts-table td {
+            padding: 10px 12px;
+            font-size: 0.85rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .alerts-table tr:hover td { background: var(--surface-hover); }
+
+        .loading-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(15, 17, 23, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            gap: 16px;
+        }
+
+        .loading-overlay.hidden { display: none; }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid var(--border);
+            border-top-color: var(--red);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .loading-text { color: var(--text-dim); font-size: 0.9rem; }
+
+        .map-section {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+            margin-bottom: 24px;
+        }
+
+        .map-section h3 {
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: var(--text-dim);
+        }
+
+        #heatmap {
+            height: 480px;
+            border-radius: 8px;
+            z-index: 1;
+        }
+
+        .clearance-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        @media (max-width: 768px) {
+            .charts-grid { grid-template-columns: 1fr; }
+            .header { flex-direction: column; gap: 12px; align-items: flex-start; }
+            .search-bar { flex-direction: column; align-items: stretch; }
+            .search-wrapper { max-width: 100%; }
+            .container { padding: 16px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loadingOverlay">
+    <div class="spinner"></div>
+    <div class="loading-text" id="loadingText">Loading alert data...</div>
+</div>
+
+<header class="header">
+    <h1><span class="dot"></span> Red Alert Tracker — Israel</h1>
+    <div class="header-actions">
+        <span class="status-badge" id="statusBadge">Loading...</span>
+        <button class="btn" onclick="refreshData()">Refresh Data</button>
+    </div>
+</header>
+
+<div class="search-bar">
+    <div class="search-wrapper">
+        <input class="search-input" id="citySearch" type="text"
+               placeholder="Search for a city..." autocomplete="off">
+        <button class="search-clear" id="searchClear" onclick="clearCityFilter()">&times;</button>
+        <div class="dropdown" id="searchDropdown"></div>
+    </div>
+    <span class="filter-badge" id="filterBadge">
+        <span id="filterCityName"></span>
+        <button onclick="clearCityFilter()">&times;</button>
+    </span>
+</div>
+
+<main class="container">
+    <section class="cards">
+        <div class="card">
+            <div class="card-label">Total Alerts</div>
+            <div class="card-value red" id="totalAlerts">&mdash;</div>
+            <div class="card-sub" id="totalDays"></div>
+        </div>
+        <div class="card">
+            <div class="card-label">Today</div>
+            <div class="card-value orange" id="todayAlerts">&mdash;</div>
+            <div class="card-sub">alerts today</div>
+        </div>
+        <div class="card">
+            <div class="card-label">Peak Day</div>
+            <div class="card-value blue" id="peakDayCount">&mdash;</div>
+            <div class="card-sub" id="peakDayDate"></div>
+        </div>
+        <div class="card">
+            <div class="card-label" id="topCityLabel">Most Affected City</div>
+            <div class="card-value purple" id="topCityName" style="font-size:1.2rem;">&mdash;</div>
+            <div class="card-sub" id="topCityCount"></div>
+        </div>
+        <div class="card">
+            <div class="card-label">Time Since Last Alert</div>
+            <div class="card-value red" id="sinceLast" style="font-size:1.4rem;">&mdash;</div>
+            <div class="card-sub" id="sinceLastSub"></div>
+        </div>
+        <div class="card">
+            <div class="card-label">Avg Time Between Alerts</div>
+            <div class="card-value orange" id="avgGap" style="font-size:1.4rem;">&mdash;</div>
+            <div class="card-sub">between distinct alert events</div>
+        </div>
+        <div class="card">
+            <div class="card-label">Longest Quiet Period</div>
+            <div class="card-value green" id="longestQuiet" style="font-size:1.4rem;">&mdash;</div>
+            <div class="card-sub" id="longestQuietSub"></div>
+        </div>
+    </section>
+
+    <section class="charts-grid">
+        <div class="chart-box wide">
+            <h3>Alerts Per Day</h3>
+            <div class="chart-container"><canvas id="dailyChart"></canvas></div>
+        </div>
+        <div class="chart-box wide">
+            <h3>Cumulative Alerts</h3>
+            <div class="chart-container"><canvas id="cumulativeChart"></canvas></div>
+        </div>
+        <div class="chart-box" id="citiesChartBox">
+            <h3>Most Affected Cities (Top 15)</h3>
+            <div class="chart-container"><canvas id="citiesChart"></canvas></div>
+        </div>
+        <div class="chart-box" id="regionsChartBox">
+            <h3>Alerts by Region</h3>
+            <div class="chart-container"><canvas id="regionsChart"></canvas></div>
+        </div>
+        <div class="chart-box">
+            <h3>Alerts by Hour of Day</h3>
+            <div class="chart-container"><canvas id="hourlyChart"></canvas></div>
+        </div>
+        <div class="chart-box">
+            <h3>Alert Types</h3>
+            <div class="chart-container"><canvas id="categoriesChart"></canvas></div>
+        </div>
+    </section>
+
+    <section class="map-section">
+        <h3>Alert Heatmap</h3>
+        <div id="heatmap"></div>
+    </section>
+
+    <section>
+        <h3 style="font-size:0.95rem; font-weight:600; color:var(--text-dim); margin-bottom:16px;">Time to All-Clear</h3>
+        <div class="clearance-cards">
+            <div class="card">
+                <div class="card-label">Avg Clearance</div>
+                <div class="card-value orange" id="clearAvg" style="font-size:1.4rem;">&mdash;</div>
+                <div class="card-sub" id="clearAvgSub">from alert to all-clear</div>
+            </div>
+            <div class="card">
+                <div class="card-label">Median</div>
+                <div class="card-value blue" id="clearMedian" style="font-size:1.4rem;">&mdash;</div>
+                <div class="card-sub">typical clearance time</div>
+            </div>
+            <div class="card">
+                <div class="card-label">Fastest</div>
+                <div class="card-value green" id="clearMin" style="font-size:1.4rem;">&mdash;</div>
+                <div class="card-sub">shortest clearance</div>
+            </div>
+            <div class="card">
+                <div class="card-label">Slowest</div>
+                <div class="card-value red" id="clearMax" style="font-size:1.4rem;">&mdash;</div>
+                <div class="card-sub" id="clearCount"></div>
+            </div>
+        </div>
+    </section>
+
+    <section class="table-box">
+        <h3 id="recentTitle">Recent Alerts</h3>
+        <div style="max-height: 400px; overflow-y: auto;">
+            <table class="alerts-table">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Time</th>
+                        <th>City</th>
+                        <th>Type</th>
+                    </tr>
+                </thead>
+                <tbody id="alertsTableBody">
+                    <tr><td colspan="4" style="text-align:center; color:var(--text-dim);">Loading...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+</main>
+
+<script>
+    const COLORS = {
+        red: '#e74c3c',
+        redAlpha: 'rgba(231, 76, 60, 0.3)',
+        orange: '#f39c12',
+        blue: '#3498db',
+        green: '#2ecc71',
+        purple: '#9b59b6',
+        teal: '#1abc9c',
+        pink: '#e91e63',
+    };
+
+    Chart.defaults.color = '#8b8fa3';
+    Chart.defaults.borderColor = '#2a2e3a';
+    Chart.defaults.font.family = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+
+    let dailyChart, citiesChart, hourlyChart, categoriesChart, cumulativeChart, regionsChart;
+    let heatmapMap = null;
+    let heatLayer = null;
+    let activeCity = null;   // Hebrew name used for API queries
+    let activeCityEn = null; // English name for display
+    let searchTimeout = null;
+    let dropdownIdx = -1;
+
+    // --- Search / Autocomplete ---
+
+    const searchInput = document.getElementById('citySearch');
+    const dropdown = document.getElementById('searchDropdown');
+    const clearBtn = document.getElementById('searchClear');
+    const filterBadge = document.getElementById('filterBadge');
+
+    searchInput.addEventListener('input', () => {
+        const q = searchInput.value.trim();
+        clearBtn.style.display = q ? 'block' : 'none';
+        if (q.length < 1) { dropdown.classList.remove('open'); return; }
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => fetchCities(q), 200);
+    });
+
+    searchInput.addEventListener('keydown', (e) => {
+        const items = dropdown.querySelectorAll('.dropdown-item');
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            dropdownIdx = Math.min(dropdownIdx + 1, items.length - 1);
+            items.forEach((el, i) => el.classList.toggle('active', i === dropdownIdx));
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            dropdownIdx = Math.max(dropdownIdx - 1, 0);
+            items.forEach((el, i) => el.classList.toggle('active', i === dropdownIdx));
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (dropdownIdx >= 0 && items[dropdownIdx]) items[dropdownIdx].click();
+        } else if (e.key === 'Escape') {
+            dropdown.classList.remove('open');
+            searchInput.blur();
+        }
+    });
+
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.search-wrapper')) dropdown.classList.remove('open');
+    });
+
+    async function fetchCities(q) {
+        try {
+            const data = await fetchJSON(`/api/cities/search?q=${encodeURIComponent(q)}`);
+            dropdownIdx = -1;
+            if (!data.length) {
+                dropdown.innerHTML = '<div class="dropdown-item" style="color:var(--text-dim);pointer-events:none;">No results</div>';
+            } else {
+                dropdown.innerHTML = data.map(c =>
+                    `<div class="dropdown-item" data-he="${esc(c.he)}" data-en="${esc(c.en)}">
+                        <span class="en">${esc(c.en)}</span>
+                        <span class="he">${esc(c.he)}</span>
+                    </div>`
+                ).join('');
+                dropdown.querySelectorAll('.dropdown-item').forEach(el => {
+                    el.addEventListener('click', () => selectCity(el.dataset.he, el.dataset.en));
+                });
+            }
+            dropdown.classList.add('open');
+        } catch (err) { console.error(err); }
+    }
+
+    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+    function selectCity(he, en) {
+        activeCity = he;
+        activeCityEn = en;
+        searchInput.value = '';
+        clearBtn.style.display = 'none';
+        dropdown.classList.remove('open');
+        document.getElementById('filterCityName').textContent = en;
+        filterBadge.classList.add('visible');
+        loadDashboard();
+    }
+
+    function clearCityFilter() {
+        activeCity = null;
+        activeCityEn = null;
+        searchInput.value = '';
+        clearBtn.style.display = 'none';
+        filterBadge.classList.remove('visible');
+        loadDashboard();
+    }
+
+    // --- Data fetching ---
+
+    async function fetchJSON(url) {
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        return resp.json();
+    }
+
+    function cityParam() {
+        return activeCity ? `city=${encodeURIComponent(activeCity)}` : '';
+    }
+
+    function urlWith(base, extra) {
+        const cp = cityParam();
+        const parts = [extra, cp].filter(Boolean);
+        return parts.length ? `${base}?${parts.join('&')}` : base;
+    }
+
+    async function loadDashboard() {
+        try {
+            const [summary, daily, cities, hourly, categories, recent, geo, regions, clearance] = await Promise.all([
+                fetchJSON(urlWith('/api/stats/summary')),
+                fetchJSON(urlWith('/api/stats/daily')),
+                fetchJSON(urlWith('/api/stats/cities', 'limit=15')),
+                fetchJSON(urlWith('/api/stats/hourly')),
+                fetchJSON(urlWith('/api/stats/categories')),
+                fetchJSON(urlWith('/api/alerts/recent', 'limit=100')),
+                fetchJSON(urlWith('/api/stats/geo')),
+                fetchJSON(urlWith('/api/stats/regions')),
+                fetchJSON(urlWith('/api/stats/clearance')),
+            ]);
+
+            renderSummary(summary);
+            renderDailyChart(daily);
+            renderCumulativeChart(daily);
+            renderCitiesChart(cities);
+            renderRegionsChart(regions);
+            renderHourlyChart(hourly);
+            renderCategoriesChart(categories);
+            renderHeatmap(geo);
+            renderClearance(clearance);
+            renderTable(recent);
+
+            document.getElementById('loadingOverlay').classList.add('hidden');
+
+            const badge = document.getElementById('statusBadge');
+            if (summary.total_alerts === 0 && !activeCity) {
+                badge.textContent = 'No alerts found';
+            } else {
+                const total = await fetchJSON('/api/data/status');
+                badge.textContent = `${total.total_alerts.toLocaleString()} alerts loaded`;
+            }
+            badge.classList.remove('fetching');
+        } catch (err) {
+            document.getElementById('loadingText').textContent = 'Error loading data. Retrying...';
+            console.error(err);
+            setTimeout(loadDashboard, 3000);
+        }
+    }
+
+    function renderSummary(s) {
+        document.getElementById('totalAlerts').textContent = s.total_alerts.toLocaleString();
+        document.getElementById('totalDays').textContent = s.total_days
+            ? `over ${s.total_days} days (avg ${s.avg_per_day}/day)` : '';
+        document.getElementById('todayAlerts').textContent = s.today_alerts.toLocaleString();
+
+        if (s.peak_day) {
+            document.getElementById('peakDayCount').textContent = s.peak_day.count.toLocaleString();
+            document.getElementById('peakDayDate').textContent = s.peak_day.date;
+        } else {
+            document.getElementById('peakDayCount').textContent = '\u2014';
+            document.getElementById('peakDayDate').textContent = '';
+        }
+
+        const cityLabel = document.getElementById('topCityLabel');
+        if (activeCity) {
+            cityLabel.textContent = 'Filtered City';
+        } else {
+            cityLabel.textContent = 'Most Affected City';
+        }
+
+        if (s.most_affected_city) {
+            document.getElementById('topCityName').textContent = s.most_affected_city.city;
+            document.getElementById('topCityCount').textContent = `${s.most_affected_city.count.toLocaleString()} alerts`;
+        } else {
+            document.getElementById('topCityName').textContent = '\u2014';
+            document.getElementById('topCityCount').textContent = '';
+        }
+
+        document.getElementById('recentTitle').textContent = activeCity
+            ? `Recent Alerts — ${activeCityEn}` : 'Recent Alerts';
+
+        document.getElementById('sinceLast').textContent = s.since_last || '\u2014';
+        document.getElementById('sinceLastSub').textContent = '';
+
+        document.getElementById('avgGap').textContent = s.avg_gap || '\u2014';
+
+        if (s.longest_quiet) {
+            document.getElementById('longestQuiet').textContent = s.longest_quiet;
+            document.getElementById('longestQuietSub').textContent =
+                `${s.longest_quiet_from} \u2192 ${s.longest_quiet_to}`;
+        } else {
+            document.getElementById('longestQuiet').textContent = '\u2014';
+            document.getElementById('longestQuietSub').textContent = '';
+        }
+
+        const citiesBox = document.getElementById('citiesChartBox');
+        citiesBox.style.display = activeCity ? 'none' : '';
+        const regionsBox = document.getElementById('regionsChartBox');
+        regionsBox.style.display = activeCity ? 'none' : '';
+    }
+
+    function renderDailyChart(data) {
+        const ctx = document.getElementById('dailyChart').getContext('2d');
+        if (dailyChart) dailyChart.destroy();
+        dailyChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: data.map(d => d.date),
+                datasets: [{
+                    label: 'Alerts',
+                    data: data.map(d => d.count),
+                    borderColor: COLORS.red,
+                    backgroundColor: COLORS.redAlpha,
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: data.length > 30 ? 0 : 3,
+                    pointHoverRadius: 5,
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { grid: { display: false }, ticks: { maxTicksLimit: 15 } },
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+    }
+
+    function renderCitiesChart(data) {
+        const ctx = document.getElementById('citiesChart').getContext('2d');
+        if (citiesChart) citiesChart.destroy();
+        citiesChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: data.map(d => d.city),
+                datasets: [{
+                    label: 'Alerts',
+                    data: data.map(d => d.count),
+                    backgroundColor: COLORS.red,
+                    borderRadius: 4,
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                indexAxis: 'y',
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { beginAtZero: true },
+                    y: { ticks: { font: { size: 11 } } }
+                }
+            }
+        });
+    }
+
+    function renderHourlyChart(data) {
+        const ctx = document.getElementById('hourlyChart').getContext('2d');
+        if (hourlyChart) hourlyChart.destroy();
+        hourlyChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: data.map(d => `${String(d.hour).padStart(2, '0')}:00`),
+                datasets: [{
+                    label: 'Alerts',
+                    data: data.map(d => d.count),
+                    backgroundColor: COLORS.orange,
+                    borderRadius: 4,
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { grid: { display: false } },
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+    }
+
+    function renderCategoriesChart(data) {
+        const ctx = document.getElementById('categoriesChart').getContext('2d');
+        if (categoriesChart) categoriesChart.destroy();
+        const palette = [COLORS.red, COLORS.orange, COLORS.blue, COLORS.green, COLORS.purple, COLORS.teal, COLORS.pink];
+        categoriesChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: data.map(d => d.category),
+                datasets: [{
+                    data: data.map(d => d.count),
+                    backgroundColor: data.map((_, i) => palette[i % palette.length]),
+                    borderWidth: 0,
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'right', labels: { padding: 12, font: { size: 11 } } }
+                }
+            }
+        });
+    }
+
+    function renderCumulativeChart(daily) {
+        const ctx = document.getElementById('cumulativeChart').getContext('2d');
+        if (cumulativeChart) cumulativeChart.destroy();
+        let cumulative = 0;
+        const cumData = daily.map(d => {
+            cumulative += d.count;
+            return { date: d.date, total: cumulative };
+        });
+        cumulativeChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: cumData.map(d => d.date),
+                datasets: [{
+                    label: 'Cumulative Alerts',
+                    data: cumData.map(d => d.total),
+                    borderColor: COLORS.purple,
+                    backgroundColor: 'rgba(155, 89, 182, 0.15)',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: cumData.length > 30 ? 0 : 3,
+                    pointHoverRadius: 5,
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { grid: { display: false }, ticks: { maxTicksLimit: 15 } },
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+    }
+
+    function renderRegionsChart(data) {
+        const ctx = document.getElementById('regionsChart').getContext('2d');
+        if (regionsChart) regionsChart.destroy();
+        const top = data.slice(0, 15);
+        const palette = [
+            COLORS.red, COLORS.orange, COLORS.blue, COLORS.green, COLORS.purple,
+            COLORS.teal, COLORS.pink, '#e67e22', '#2980b9', '#27ae60',
+            '#8e44ad', '#16a085', '#c0392b', '#f1c40f', '#d35400',
+        ];
+        regionsChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: top.map(d => d.region),
+                datasets: [{
+                    label: 'Alerts',
+                    data: top.map(d => d.count),
+                    backgroundColor: top.map((_, i) => palette[i % palette.length]),
+                    borderRadius: 4,
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                indexAxis: 'y',
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { beginAtZero: true },
+                    y: { ticks: { font: { size: 11 } } }
+                }
+            }
+        });
+    }
+
+    function renderHeatmap(geoData) {
+        if (!heatmapMap) {
+            heatmapMap = L.map('heatmap', {
+                center: [31.5, 34.8],
+                zoom: 7.5,
+                zoomControl: true,
+                scrollWheelZoom: true,
+            });
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; OpenStreetMap &copy; CARTO',
+                maxZoom: 18,
+            }).addTo(heatmapMap);
+        }
+        if (heatLayer) heatmapMap.removeLayer(heatLayer);
+
+        if (!geoData.length) return;
+
+        const maxCount = Math.max(...geoData.map(d => d.count));
+        const points = geoData.map(d => [d.lat, d.lng, d.count / maxCount]);
+        heatLayer = L.heatLayer(points, {
+            radius: 22,
+            blur: 18,
+            maxZoom: 12,
+            gradient: { 0.2: '#2ecc71', 0.4: '#f39c12', 0.6: '#e67e22', 0.8: '#e74c3c', 1.0: '#c0392b' },
+        }).addTo(heatmapMap);
+    }
+
+    function renderClearance(data) {
+        document.getElementById('clearAvg').textContent = data.avg || '\u2014';
+        document.getElementById('clearMedian').textContent = data.median || '\u2014';
+        document.getElementById('clearMin').textContent = data.min || '\u2014';
+        document.getElementById('clearMax').textContent = data.max || '\u2014';
+        document.getElementById('clearCount').textContent =
+            data.count ? `based on ${data.count.toLocaleString()} events` : '';
+    }
+
+    function renderTable(data) {
+        const tbody = document.getElementById('alertsTableBody');
+        if (!data.length) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:var(--text-dim);">No alerts found</td></tr>';
+            return;
+        }
+        tbody.innerHTML = data.map(a => `
+            <tr>
+                <td>${a.date}</td>
+                <td>${a.time}</td>
+                <td>${a.city}</td>
+                <td>${a.category}</td>
+            </tr>
+        `).join('');
+    }
+
+    async function refreshData() {
+        const btn = event.target;
+        btn.disabled = true;
+        btn.textContent = 'Refreshing...';
+        try {
+            await fetch('/api/data/refresh', { method: 'POST' });
+            await pollStatus();
+            await loadDashboard();
+        } catch (err) { console.error(err); }
+        finally { btn.disabled = false; btn.textContent = 'Refresh Data'; }
+    }
+
+    async function pollStatus() {
+        const badge = document.getElementById('statusBadge');
+        while (true) {
+            const s = await fetchJSON('/api/data/status');
+            if (s.fetching) {
+                badge.textContent = `Fetching... (${s.total_alerts.toLocaleString()} alerts)`;
+                badge.classList.add('fetching');
+                await new Promise(r => setTimeout(r, 2000));
+            } else {
+                badge.textContent = `${s.total_alerts.toLocaleString()} alerts loaded`;
+                badge.classList.remove('fetching');
+                break;
+            }
+        }
+    }
+
+    async function init() {
+        const status = await fetchJSON('/api/data/status');
+        const badge = document.getElementById('statusBadge');
+        if (status.fetching) {
+            document.getElementById('loadingText').textContent = 'Fetching alert data...';
+            badge.textContent = 'Fetching data...';
+            badge.classList.add('fetching');
+            await pollStatus();
+        } else if (status.total_alerts === 0) {
+            document.getElementById('loadingText').textContent = 'Waiting for initial data fetch...';
+            for (let i = 0; i < 10; i++) {
+                await new Promise(r => setTimeout(r, 3000));
+                const s = await fetchJSON('/api/data/status');
+                if (s.total_alerts > 0 || !s.fetching) break;
+            }
+        }
+        await loadDashboard();
+    }
+
+    init();
+</script>
+</body>
+</html>
