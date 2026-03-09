@@ -747,8 +747,15 @@
         document.getElementById('recentTitle').textContent = activeCity
             ? `Recent Alerts — ${activeCityEn}` : 'Recent Alerts';
 
-        document.getElementById('sinceLast').textContent = s.since_last || '\u2014';
-        document.getElementById('sinceLastSub').textContent = '';
+        if (s.last_alert_iso) {
+            const lastAlert = new Date(s.last_alert_iso);
+            const sinceSecs = (Date.now() - lastAlert.getTime()) / 1000;
+            document.getElementById('sinceLast').textContent = fmtDuration(Math.max(0, sinceSecs));
+            document.getElementById('sinceLastSub').textContent = '';
+        } else {
+            document.getElementById('sinceLast').textContent = '\u2014';
+            document.getElementById('sinceLastSub').textContent = '';
+        }
 
         document.getElementById('avgGap').textContent = s.avg_gap || '\u2014';
 

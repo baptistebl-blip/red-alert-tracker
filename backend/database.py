@@ -152,18 +152,14 @@ def _get_timing_stats(cur, w: str, params: tuple) -> dict:
         except ValueError:
             pass
 
+    last_iso = timestamps[-1].strftime("%Y-%m-%dT%H:%M:%S+03:00")
+
     if len(timestamps) < 2:
-        now = datetime.now()
-        since = (now - timestamps[0]).total_seconds() if timestamps else 0
         return {
-            "since_last": _fmt_duration(since),
-            "since_last_seconds": since,
+            "last_alert_iso": last_iso,
             "avg_gap": None,
             "longest_quiet": None,
         }
-
-    now = datetime.now()
-    since_last = (now - timestamps[-1]).total_seconds()
 
     gaps = [(timestamps[i + 1] - timestamps[i]).total_seconds() for i in range(len(timestamps) - 1)]
     avg_gap = sum(gaps) / len(gaps)
@@ -173,8 +169,7 @@ def _get_timing_stats(cur, w: str, params: tuple) -> dict:
     quiet_end = timestamps[max_gap_idx + 1]
 
     return {
-        "since_last": _fmt_duration(since_last),
-        "since_last_seconds": since_last,
+        "last_alert_iso": last_iso,
         "avg_gap": _fmt_duration(avg_gap),
         "avg_gap_seconds": avg_gap,
         "longest_quiet": _fmt_duration(max_gap),
