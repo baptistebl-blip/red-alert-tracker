@@ -454,6 +454,11 @@
             <div class="card-value green" id="longestQuiet" style="font-size:1.4rem;">&mdash;</div>
             <div class="card-sub" id="longestQuietSub"></div>
         </div>
+        <div class="card">
+            <div class="card-label">Total Time in Bunker</div>
+            <div class="card-value red" id="bunkerTime" style="font-size:1.4rem;">&mdash;</div>
+            <div class="card-sub" id="bunkerSub"></div>
+        </div>
     </section>
 
     <section class="charts-grid">
@@ -671,7 +676,7 @@
                 fetchJSON(urlWith('/api/stats/clearance')),
             ]);
 
-            renderSummary(summary);
+            renderSummary(summary, clearance);
             renderDailyChart(daily);
             renderCumulativeChart(daily);
             renderCitiesChart(cities);
@@ -699,7 +704,18 @@
         }
     }
 
-    function renderSummary(s) {
+    function fmtDuration(secs) {
+        const s = Math.floor(secs);
+        if (s < 60) return s + 's';
+        if (s < 3600) return Math.floor(s / 60) + 'm ' + (s % 60) + 's';
+        const h = Math.floor(s / 3600);
+        const m = Math.floor((s % 3600) / 60);
+        if (h < 24) return h + 'h ' + m + 'm';
+        const d = Math.floor(h / 24);
+        return d + 'd ' + (h % 24) + 'h ' + m + 'm';
+    }
+
+    function renderSummary(s, clearance) {
         document.getElementById('totalAlerts').textContent = s.total_alerts.toLocaleString();
         document.getElementById('totalDays').textContent = s.total_days
             ? `over ${s.total_days} days (avg ${s.avg_per_day}/day)` : '';
@@ -743,6 +759,16 @@
         } else {
             document.getElementById('longestQuiet').textContent = '\u2014';
             document.getElementById('longestQuietSub').textContent = '';
+        }
+
+        if (clearance && clearance.avg_seconds && s.total_alerts > 0) {
+            const totalBunkerSecs = s.total_alerts * clearance.avg_seconds;
+            document.getElementById('bunkerTime').textContent = fmtDuration(totalBunkerSecs);
+            document.getElementById('bunkerSub').textContent =
+                `${s.total_alerts.toLocaleString()} alerts \u00d7 ${clearance.avg} avg clearance`;
+        } else {
+            document.getElementById('bunkerTime').textContent = '\u2014';
+            document.getElementById('bunkerSub').textContent = '';
         }
 
         const citiesBox = document.getElementById('citiesChartBox');
